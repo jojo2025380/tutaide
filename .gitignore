@@ -1,0 +1,10 @@
+.env
+venv/
+__pycache__/
+*.db
+*.pdf
+*.png
+*_debug.txt
+test_*.py
+app_backup_before_move.py
+move_story_script.py
