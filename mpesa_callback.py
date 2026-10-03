@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 
-@app.route("/mpesa/callback", methods=["POST"])
+@app.route("/payment/callback", methods=["POST"])
 def mpesa_callback():
     data = request.get_json(silent=True)
 
