@@ -25,7 +25,7 @@ else:
 
 # This MUST be a publicly reachable URL once deployed
 # (not localhost) - Safaricom sends payment confirmations here
-CALLBACK_URL = "https://tutaide.co/mpesa/callback"
+CALLBACK_URL = "https://tutaide-callback.onrender.com/payment/callback"
 
 
 def get_access_token():

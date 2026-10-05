@@ -8,3 +8,4 @@ __pycache__/
 test_*.py
 app_backup_before_move.py
 move_story_script.py
+components/lesson_generator_backup.py

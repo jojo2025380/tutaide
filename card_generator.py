@@ -165,11 +165,16 @@ CARDS TO INCLUDE:
 {cards_text}
 
 STRICT CONTENT REQUIREMENT:
+
 - Create exactly 4 cards, one for each item listed in CARDS TO INCLUDE, in order.
 - Each card MUST show the exact requested item as its main subject.
 - Never replace a requested item with a person, child, face, animal or unrelated object unless the item itself is a person.
-- Do not use children or adults to represent plant parts.
-- The requested object or plant part must be large, clear and immediately recognisable.
+- For plant-part cards, show the requested plant part clearly and separately.
+- If the requested item is "root", show visible roots underground attached to the plant.
+- If the requested item is "stem", show a clear upright plant stem or stalk as the main subject, visibly connecting the roots to the leaves. The stem must be a distinct elongated structure, not a leaf.
+- If the requested item is "leaf", show a recognisable leaf with a clear leaf shape and visible leaf veins. Do not use a stem as the main subject.
+- If the requested item is "flower", show a recognisable flower as the main subject.
+- The requested object must be large, clear and immediately recognisable.
 - One main concept per card.
 - Do not add extra cards, watermarks, logos or speech bubbles.
 
