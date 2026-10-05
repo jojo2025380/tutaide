@@ -29,6 +29,11 @@ def get_connection():
 
 def create_database():
 
+    # Supabase/PostgreSQL tables are already created and migrated.
+    # Do not run the SQLite-specific schema setup against PostgreSQL.
+    if os.getenv("DATABASE_URL"):
+        return
+
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -56,41 +61,41 @@ def create_database():
         )
     """)
 
-   # ---------------- LESSONS TABLE ----------------
+    # ---------------- LESSONS TABLE ----------------
 
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS lessons (
+        CREATE TABLE IF NOT EXISTS lessons (
 
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-        user_id INTEGER,
+            user_id INTEGER,
 
-        title TEXT,
-        age TEXT,
-        duration TEXT,
+            title TEXT,
+            age TEXT,
+            duration TEXT,
 
-        outcomes TEXT,
-        materials TEXT,
-        warmup TEXT,
-        steps TEXT,
+            outcomes TEXT,
+            materials TEXT,
+            warmup TEXT,
+            steps TEXT,
 
-        tune TEXT,
-        song TEXT,
-        story TEXT,
-        game TEXT,
+            tune TEXT,
+            song TEXT,
+            story TEXT,
+            game TEXT,
 
-        assessment TEXT,
-        home TEXT,
+            assessment TEXT,
+            home TEXT,
 
-        picture_cards TEXT,
+            picture_cards TEXT,
 
-        created_at TEXT,
-        updated_at TEXT,
+            created_at TEXT,
+            updated_at TEXT,
 
-        FOREIGN KEY (user_id) REFERENCES users(id)
+            FOREIGN KEY (user_id) REFERENCES users(id)
 
         )
-""")
+    """)
 
     try:
         cursor.execute(
@@ -146,8 +151,8 @@ def create_database():
 
         )
     """)
-    
-        # ---------------- EXTENSION CREDITS TABLE ----------------
+
+    # ---------------- EXTENSION CREDITS TABLE ----------------
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS extension_credits (
@@ -176,7 +181,7 @@ def create_database():
         column["name"]
         for column in cursor.fetchall()
     ]
-    
+
     if "picture_cards" not in lesson_columns:
 
         cursor.execute("""
@@ -198,81 +203,10 @@ def create_database():
             ADD COLUMN animated_story TEXT
         """)
 
-    if "user_id" not in lesson_columns:
-
-        cursor.execute("""
-            ALTER TABLE lessons
-            ADD COLUMN user_id INTEGER
-        """)
-
-    if "created_at" not in lesson_columns:
-
-        cursor.execute("""
-            ALTER TABLE lessons
-            ADD COLUMN created_at TEXT
-        """)
-
-    if "updated_at" not in lesson_columns:
-
-        cursor.execute("""
-            ALTER TABLE lessons
-            ADD COLUMN updated_at TEXT
-        """)
-
-    # ---------------- USER MIGRATION ----------------
-
-    cursor.execute("PRAGMA table_info(users)")
-    user_columns = [
-        column["name"]
-        for column in cursor.fetchall()
-    ]
-
-    if "plan" not in user_columns:
-
-        cursor.execute("""
-            ALTER TABLE users
-            ADD COLUMN plan TEXT DEFAULT NULL
-        """)
-
-    if "subscription_status" not in user_columns:
-
-        cursor.execute("""
-            ALTER TABLE users
-            ADD COLUMN subscription_status TEXT DEFAULT 'inactive'
-        """)
-
-    if "subscription_start" not in user_columns:
-
-        cursor.execute("""
-            ALTER TABLE users
-            ADD COLUMN subscription_start TEXT
-        """)
-
-    if "subscription_end" not in user_columns:
-
-        cursor.execute("""
-            ALTER TABLE users
-            ADD COLUMN subscription_end TEXT
-        """)
-
-        # ---------------- PAYMENT MIGRATION ----------------
-
-    cursor.execute("PRAGMA table_info(payments)")
-    payment_columns = [
-        column["name"]
-        for column in cursor.fetchall()
-    ]
-
-    if "mpesa_transaction_id" not in payment_columns:
-
-        cursor.execute("""
-            ALTER TABLE payments
-            ADD COLUMN mpesa_transaction_id TEXT
-        """)
-
     conn.commit()
+    cursor.close()
     conn.close()
-
+    
 
 # ==================================================
 # LESSONS
@@ -314,7 +248,9 @@ def save_lesson(user_id, lesson):
 
         )
 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
         """,
         (
 
@@ -344,9 +280,10 @@ def save_lesson(user_id, lesson):
         )
     )
 
-    lesson_id = cursor.lastrowid
+    lesson_id = cursor.fetchone()["id"]
 
     conn.commit()
+    cursor.close()
     conn.close()
 
     return lesson_id
@@ -361,7 +298,7 @@ def get_all_lessons(user_id):
         """
         SELECT id, title, age, duration, created_at, updated_at
         FROM lessons
-        WHERE user_id = ?
+        WHERE user_id = %s
         ORDER BY id DESC
         """,
         (user_id,)
@@ -369,6 +306,7 @@ def get_all_lessons(user_id):
 
     lessons = cursor.fetchall()
 
+    cursor.close()
     conn.close()
 
     return lessons
@@ -383,14 +321,15 @@ def get_lesson(user_id, lesson_id):
         """
         SELECT *
         FROM lessons
-        WHERE id = ?
-        AND user_id = ?
+        WHERE id = %s
+        AND user_id = %s
         """,
         (lesson_id, user_id)
     )
 
     lesson = cursor.fetchone()
 
+    cursor.close()
     conn.close()
 
     if lesson is None:
@@ -401,11 +340,7 @@ def get_lesson(user_id, lesson_id):
         "id": lesson["id"],
 
         "title": lesson["title"],
-        "topic": (
-            lesson["topic"]
-            if "topic" in lesson.keys()
-            else None
-        ),
+        "topic": lesson["topic"],
         "age": lesson["age"],
         "duration": lesson["duration"],
 
@@ -422,19 +357,9 @@ def get_lesson(user_id, lesson_id):
         "assessment": lesson["assessment"],
         "home": lesson["home"],
 
-                # Saved Picture Cards
         "picture_cards": lesson["picture_cards"],
-        "picture_cards_colour": (
-            lesson["picture_cards_colour"]
-            if "picture_cards_colour" in lesson.keys()
-            else None
-        ),
-
-        "animated_story": (
-            lesson["animated_story"]
-            if "animated_story" in lesson.keys()
-            else None
-        ),
+        "picture_cards_colour": lesson["picture_cards_colour"],
+        "animated_story": lesson["animated_story"],
 
         "created_at": lesson["created_at"],
         "updated_at": lesson["updated_at"]
@@ -454,23 +379,23 @@ def update_lesson(user_id, lesson_id, lesson):
         UPDATE lessons
 
         SET
-            title = ?,
-            age = ?,
-            duration = ?,
-            outcomes = ?,
-            materials = ?,
-            warmup = ?,
-            steps = ?,
-            tune = ?,
-            song = ?,
-            story = ?,
-            game = ?,
-            assessment = ?,
-            home = ?,
-            updated_at = ?
+            title = %s,
+            age = %s,
+            duration = %s,
+            outcomes = %s,
+            materials = %s,
+            warmup = %s,
+            steps = %s,
+            tune = %s,
+            song = %s,
+            story = %s,
+            game = %s,
+            assessment = %s,
+            home = %s,
+            updated_at = %s
 
-        WHERE id = ?
-        AND user_id = ?
+        WHERE id = %s
+        AND user_id = %s
         """,
         (
 
@@ -499,6 +424,7 @@ def update_lesson(user_id, lesson_id, lesson):
     )
 
     conn.commit()
+    cursor.close()
     conn.close()
 
 def save_picture_cards(user_id, lesson_id, picture_cards):
@@ -513,11 +439,11 @@ def save_picture_cards(user_id, lesson_id, picture_cards):
         UPDATE lessons
 
         SET
-            picture_cards = ?,
-            updated_at = ?
+            picture_cards = %s,
+            updated_at = %s
 
-        WHERE id = ?
-        AND user_id = ?
+        WHERE id = %s
+        AND user_id = %s
         """,
         (
             picture_cards,
@@ -528,6 +454,7 @@ def save_picture_cards(user_id, lesson_id, picture_cards):
     )
 
     conn.commit()
+    cursor.close()
     conn.close()
 
 
@@ -543,11 +470,11 @@ def save_picture_cards_colour(user_id, lesson_id, picture_cards_colour):
         UPDATE lessons
 
         SET
-            picture_cards_colour = ?,
-            updated_at = ?
+            picture_cards_colour = %s,
+            updated_at = %s
 
-        WHERE id = ?
-        AND user_id = ?
+        WHERE id = %s
+        AND user_id = %s
         """,
         (
             picture_cards_colour,
@@ -558,10 +485,11 @@ def save_picture_cards_colour(user_id, lesson_id, picture_cards_colour):
     )
 
     conn.commit()
+    cursor.close()
     conn.close()
 
 
-def save_animated_story(user_id, lesson_id, story_json):
+def save_animated_story(user_id, lesson_id, animated_story):
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -573,14 +501,14 @@ def save_animated_story(user_id, lesson_id, story_json):
         UPDATE lessons
 
         SET
-            animated_story = ?,
-            updated_at = ?
+            animated_story = %s,
+            updated_at = %s
 
-        WHERE id = ?
-        AND user_id = ?
+        WHERE id = %s
+        AND user_id = %s
         """,
         (
-            story_json,
+            animated_story,
             now,
             lesson_id,
             user_id
@@ -588,31 +516,39 @@ def save_animated_story(user_id, lesson_id, story_json):
     )
 
     conn.commit()
+    cursor.close()
     conn.close()
 
 
 
-def search_lessons(user_id, keyword):
+def search_lessons(user_id, search):
 
     conn = get_connection()
     cursor = conn.cursor()
 
+    search_pattern = f"%{search}%"
+
     cursor.execute(
         """
-        SELECT id, title, age, duration
+        SELECT id, title, age, duration, created_at, updated_at
         FROM lessons
-        WHERE user_id = ?
-        AND title LIKE ?
+        WHERE user_id = %s
+        AND (
+            title ILIKE %s
+            OR topic ILIKE %s
+        )
         ORDER BY id DESC
         """,
         (
             user_id,
-            f"%{keyword}%"
+            search_pattern,
+            search_pattern
         )
     )
 
     lessons = cursor.fetchall()
 
+    cursor.close()
     conn.close()
 
     return lessons
@@ -626,13 +562,17 @@ def delete_lesson(user_id, lesson_id):
     cursor.execute(
         """
         DELETE FROM lessons
-        WHERE id = ?
-        AND user_id = ?
+        WHERE id = %s
+        AND user_id = %s
         """,
-        (lesson_id, user_id)
+        (
+            lesson_id,
+            user_id
+        )
     )
 
     conn.commit()
+    cursor.close()
     conn.close()
 
 
@@ -643,15 +583,16 @@ def count_user_lessons(user_id):
 
     cursor.execute(
         """
-        SELECT COUNT(*)
+        SELECT COUNT(*) AS count
         FROM lessons
-        WHERE user_id = ?
+        WHERE user_id = %s
         """,
         (user_id,)
     )
 
-    total = cursor.fetchone()[0]
+    total = cursor.fetchone()["count"]
 
+    cursor.close()
     conn.close()
 
     return total
@@ -661,7 +602,8 @@ def count_user_lessons(user_id):
 # PAYMENTS
 # ==================================================
 
-def save_payment(user_id, amount, reference, status="pending"):
+
+def save_payment(user_id, amount, reference, status, plan=None):
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -675,22 +617,26 @@ def save_payment(user_id, amount, reference, status="pending"):
             amount,
             reference,
             status,
+            plan,
             payment_date
         )
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id
         """,
         (
             user_id,
             amount,
             reference,
             status,
+            plan,
             now
         )
     )
 
-    payment_id = cursor.lastrowid
+    payment_id = cursor.fetchone()["id"]
 
     conn.commit()
+    cursor.close()
     conn.close()
 
     return payment_id
@@ -704,13 +650,17 @@ def update_payment_status(reference, status):
     cursor.execute(
         """
         UPDATE payments
-        SET status = ?
-        WHERE reference = ?
+        SET status = %s
+        WHERE reference = %s
         """,
-        (status, reference)
+        (
+            status,
+            reference
+        )
     )
 
     conn.commit()
+    cursor.close()
     conn.close()
 
 
@@ -723,7 +673,7 @@ def get_payment_by_reference(reference):
         """
         SELECT *
         FROM payments
-        WHERE reference = ?
+        WHERE reference = %s
         """,
         (reference,)
     )
@@ -747,7 +697,7 @@ def get_user_payments(user_id):
         """
         SELECT *
         FROM payments
-        WHERE user_id = ?
+        WHERE user_id = %s
         ORDER BY payment_date DESC
         """,
         (user_id,)
@@ -780,12 +730,12 @@ def set_subscription(
         UPDATE users
 
         SET
-            plan = ?,
-            subscription_status = ?,
-            subscription_start = ?,
-            subscription_end = ?
+            plan = %s,
+            subscription_status = %s,
+            subscription_start = %s,
+            subscription_end = %s
 
-        WHERE id = ?
+        WHERE id = %s
         """,
         (
             plan,
@@ -815,7 +765,7 @@ def get_user_subscription(user_id):
 
         FROM users
 
-        WHERE id = ?
+        WHERE id = %s
         """,
         (user_id,)
     )
@@ -848,12 +798,15 @@ def get_usage(user_id):
 
     cursor.execute(
         """
-        INSERT OR IGNORE INTO usage (
+        INSERT INTO usage (
             user_id,
             month
         )
 
-        VALUES (?, ?)
+        VALUES (%s, %s)
+
+        ON CONFLICT (user_id, month)
+        DO NOTHING
         """,
         (user_id, month)
     )
@@ -864,8 +817,8 @@ def get_usage(user_id):
         """
         SELECT *
         FROM usage
-        WHERE user_id = ?
-        AND month = ?
+        WHERE user_id = %s
+        AND month = %s
         """,
         (user_id, month)
     )
@@ -900,12 +853,15 @@ def increment_usage(
 
     cursor.execute(
         """
-        INSERT OR IGNORE INTO usage (
+        INSERT INTO usage (
             user_id,
             month
         )
 
-        VALUES (?, ?)
+        VALUES (%s, %s)
+
+        ON CONFLICT (user_id, month)
+        DO NOTHING
         """,
         (user_id, month)
     )
@@ -915,10 +871,10 @@ def increment_usage(
         UPDATE usage
 
         SET {resource_type} =
-            {resource_type} + ?
+            {resource_type} + %s
 
-        WHERE user_id = ?
-        AND month = ?
+        WHERE user_id = %s
+        AND month = %s
         """,
         (
             amount,
@@ -1069,8 +1025,8 @@ def get_extension_credits(user_id, resource_type):
         """
         SELECT credits
         FROM extension_credits
-        WHERE user_id = ?
-        AND resource_type = ?
+        WHERE user_id = %s
+        AND resource_type = %s
         """,
         (
             user_id,
@@ -1103,8 +1059,8 @@ def add_extension_credits(
         """
         SELECT id
         FROM extension_credits
-        WHERE user_id = ?
-        AND resource_type = ?
+        WHERE user_id = %s
+        AND resource_type = %s
         """,
         (
             user_id,
@@ -1120,11 +1076,11 @@ def add_extension_credits(
             """
             UPDATE extension_credits
 
-            SET credits = credits + ?,
-                updated_at = ?
+            SET credits = credits + %s,
+                updated_at = %s
 
-            WHERE user_id = ?
-            AND resource_type = ?
+            WHERE user_id = %s
+            AND resource_type = %s
             """,
             (
                 credits,
@@ -1146,7 +1102,7 @@ def add_extension_credits(
                 updated_at
             )
 
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
             """,
             (
                 user_id,
@@ -1173,8 +1129,8 @@ def use_extension_credit(
         """
         SELECT credits
         FROM extension_credits
-        WHERE user_id = ?
-        AND resource_type = ?
+        WHERE user_id = %s
+        AND resource_type = %s
         """,
         (
             user_id,
@@ -1195,10 +1151,10 @@ def use_extension_credit(
         UPDATE extension_credits
 
         SET credits = credits - 1,
-            updated_at = ?
+            updated_at = %s
 
-        WHERE user_id = ?
-        AND resource_type = ?
+        WHERE user_id = %s
+        AND resource_type = %s
         """,
         (
             datetime.now().isoformat(),
