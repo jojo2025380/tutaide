@@ -43,43 +43,36 @@ def get_access_token():
 
 
 def initiate_stk_push(phone_number, amount, account_reference, transaction_desc):
+    if phone_number.startswith("0"):
+        phone_number = "254" + phone_number[1:]
+    elif phone_number.startswith("+"):
+        phone_number = phone_number[1:]
 
     access_token = get_access_token()
-
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-
     password = base64.b64encode(
         f"{SHORTCODE}{PASSKEY}{timestamp}".encode("utf-8")
     ).decode("utf-8")
 
     url = f"{BASE_URL}/mpesa/stkpush/v1/processrequest"
-
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
+    headers = {"Authorization": f"Bearer {access_token}"}
 
     payload = {
         "BusinessShortCode": SHORTCODE,
         "Password": password,
         "Timestamp": timestamp,
-        "TransactionType": "CustomerPayBillOnline",
+        "TransactionType": "CustomerBuyGoodsOnline",
         "Amount": int(amount),
         "PartyA": phone_number,
-        "PartyB": SHORTCODE,
+        "PartyB": "1747470",
         "PhoneNumber": phone_number,
         "CallBackURL": CALLBACK_URL,
         "AccountReference": account_reference,
         "TransactionDesc": transaction_desc
     }
 
-    response = requests.post(
-        url,
-        json=payload,
-        headers=headers
-    )
-
+    response = requests.post(url, json=payload, headers=headers)
     response.raise_for_status()
-
     return response.json()
 
 

@@ -1,12 +1,27 @@
+import os
 import sqlite3
 import json
 from datetime import datetime
 
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DATABASE = "lessons.db"
 
 
 def get_connection():
+    database_url = os.getenv("DATABASE_URL")
+
+    if database_url:
+        return psycopg2.connect(
+            database_url,
+            sslmode="require",
+            cursor_factory=RealDictCursor
+        )
+
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     return conn
