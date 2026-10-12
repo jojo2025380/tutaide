@@ -1049,7 +1049,7 @@ if lesson:
                                     )
 
                                     scene_images = split_story_scene_sheet(
-                                        sheet_dataT
+                                        sheet_data
                                     )
 
                             except Exception:
