@@ -648,10 +648,9 @@ if submitted:
         )
 
     except Exception as e:
-        print(
-            f"LESSON_GENERATION_ERROR: {type(e).__name__}: {e!r}",
-            flush=True
-        )
+        import traceback
+        print("LESSON_GENERATION_ERROR_DETAILS:", flush=True)
+        traceback.print_exc()
         st.error(f"AI Error: {e}")
         st.stop()
 
