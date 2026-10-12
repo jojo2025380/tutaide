@@ -648,11 +648,11 @@ if submitted:
         )
 
     except Exception as e:
-
-        st.error(
-            f"AI Error: {e}"
+        print(
+            f"LESSON_GENERATION_ERROR: {type(e).__name__}: {e!r}",
+            flush=True
         )
-
+        st.error(f"AI Error: {e}")
         st.stop()
 
     # ---------------- STORE CLEAN TOPIC ----------------
