@@ -272,7 +272,7 @@ def show_lesson_editor(user):
         
     if st.button(
         "✅ Done Editing",
-        use_container_width=True
+        width="stretch"
     ):
 
         st.session_state.edit_lesson = None

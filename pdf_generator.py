@@ -19,7 +19,7 @@ def generate_pdf(lesson, filename="lesson.pdf"):
 
     content.append(
     Paragraph(
-        "ECE AI ASSISTANT<br/>Early Childhood Lesson Plan",
+                "TutAide<br/>Early Childhood Lesson Plan",
         styles["Title"]
     )
 )
@@ -159,7 +159,7 @@ def generate_pdf(lesson, filename="lesson.pdf"):
 
     content.append(
     Paragraph(
-        "Generated with ECE AI Assistant",
+        "Generated with TutAide",
         styles["Italic"]
     )
 )

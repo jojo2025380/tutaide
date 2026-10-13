@@ -77,7 +77,7 @@ create_database()
 
 # ---------------- PAGE SETUP ----------------
 st.set_page_config(
-    page_title="ECE AI Assistant",
+    page_title="TutAide",
     page_icon="📚",
     layout="centered"
 )
@@ -197,7 +197,7 @@ show_dashboard(
 
 
 # ---------------- SIDEBAR ----------------
-st.sidebar.title("📚 ECE AI Assistant")
+st.sidebar.title("📚 TutAide")
 
 st.sidebar.subheader("👤 Account")
 
@@ -205,7 +205,7 @@ st.sidebar.success(
     f"Logged in as\n\n**{st.session_state.user['name']}**"
 )
 
-if st.sidebar.button("🚪 Logout", use_container_width=True):
+if st.sidebar.button("🚪 Logout", width="stretch"):
 
     st.session_state.user = None
     st.session_state.selected_lesson = None
@@ -287,7 +287,7 @@ for plan_key, plan in PLANS.items():
         if st.sidebar.button(
             f"Upgrade to {plan['name']}",
             key=f"upgrade_{plan_key}",
-            use_container_width=True
+            width="stretch"
         ):
 
             st.session_state[f"show_payment_{plan_key}"] = True
@@ -303,7 +303,7 @@ for plan_key, plan in PLANS.items():
             if st.sidebar.button(
                 "Pay Now",
                 key=f"pay_now_{plan_key}",
-                use_container_width=True
+                width="stretch"
             ):
 
                 if not phone_number.strip():
@@ -319,8 +319,8 @@ for plan_key, plan in PLANS.items():
                         stk_response = initiate_stk_push(
                             phone_number.strip(),
                             plan["price"],
-                            f"TutorAide-{plan_key}",
-                            f"TutorAide {plan['name']} Plan"
+                            f"TutAide-{plan_key}",
+                            f"TutAide {plan['name']} Plan"
                         )
 
                         checkout_id = stk_response.get(
@@ -437,7 +437,7 @@ extension_resource = st.sidebar.selectbox(
 
 if st.sidebar.button(
     "🎁 Get Extension Pack — KSh 150",
-    use_container_width=True
+    width="stretch"
 ):
 
     st.session_state["show_extension_payment"] = True
@@ -453,7 +453,7 @@ if st.session_state.get("show_extension_payment"):
     if st.sidebar.button(
         "Pay Now",
         key="pay_now_extension",
-        use_container_width=True
+        width="stretch"
     ):
 
         if not ext_phone_number.strip():
@@ -477,8 +477,8 @@ if st.session_state.get("show_extension_payment"):
                 stk_response = initiate_stk_push(
                     ext_phone_number.strip(),
                     150,
-                    "TutorAide-Extension",
-                    "TutorAide Extension Pack"
+                    "TutAide-Extension",
+                    "TutAide Extension Pack"
                 )
 
                 checkout_id = stk_response.get(
@@ -782,7 +782,7 @@ if lesson:
         # LESSON TAB
         # ==================================================
 
-        with lesson_tab:
+        if lesson_tab.open:
 
             st.subheader("🎯 Learning Outcomes")
 
@@ -828,7 +828,7 @@ if lesson:
         # ACTIVITIES TAB
         # ==================================================
 
-        with activities_tab:
+        if activities_tab.open:
 
             st.subheader("🎵 Song")
 
@@ -867,7 +867,7 @@ if lesson:
 
             if st.button(
                 "🎬 Generate Animated Story",
-                use_container_width=True
+                width="stretch"
             ):
 
                 plan_limits = get_plan_limits(
@@ -930,7 +930,7 @@ if lesson:
 
                         if st.button(
                             "🎬 Use Extension Pack Credit",
-                            use_container_width=True,
+                            width="stretch",
                             key="use_story_extension"
                         ):
 
@@ -1033,7 +1033,7 @@ if lesson:
                         if st.button(
                             "🖼️ Generate Story Images",
                             key="generate_story_images",
-                            use_container_width=True
+                            width="stretch"
                         ):
 
                             try:
@@ -1100,7 +1100,7 @@ if lesson:
 
                         if st.button(
                             "🖼️ Use Extension Pack Credit",
-                            use_container_width=True
+                            width="stretch"
                         ):
 
                             try:
@@ -1182,7 +1182,7 @@ if lesson:
 
                             st.image(
                                 image_bytes,
-                                use_container_width=True
+                                width="stretch"
                             )
 
                 for scene in story["scenes"]:
@@ -1225,7 +1225,7 @@ if lesson:
                         f"🃏 Generate Picture Cards "
                         f"({remaining_picture_cards} remaining)",
                         key="generate_picture_cards",
-                        use_container_width=True
+                        width="stretch"
                     ):
 
                         try:
@@ -1305,7 +1305,7 @@ if lesson:
 
                         if st.button(
                             "🃏 Use Extension Pack Credit",
-                            use_container_width=True,
+                            width="stretch",
                             key="use_picture_card_extension"
                         ):
 
@@ -1388,7 +1388,7 @@ if lesson:
 
                     st.image(
                         card_bytes,
-                        use_container_width=True
+                        width="stretch"
                     )
 
                     st.download_button(
@@ -1414,7 +1414,7 @@ if lesson:
 
                     st.image(
                         colour_bytes,
-                        use_container_width=True
+                        width="stretch"
                     )
 
                     st.download_button(
@@ -1424,17 +1424,36 @@ if lesson:
                         mime="image/png"
                     )
 
+        
+        
         # ==================================================
         # ASSESSMENT TAB
         # ==================================================
 
-        with assessment_tab:
+        if assessment_tab.open:
 
             st.subheader("🧪 Assessment")
 
-            st.warning(
-                lesson["assessment"]
-            )
+            assessment_text = str(lesson["assessment"]).strip()
+            assessment_points = [
+                point.strip()
+                for point in assessment_text.replace("\r\n", "\n").split("\n")
+                if point.strip()
+            ]
+
+            if len(assessment_points) == 1:
+                import re
+                assessment_points = [
+                    point.strip()
+                    for point in re.split(
+                        r"(?<=[.!?])\s+(?=[A-Z0-9])",
+                        assessment_points[0]
+                    )
+                    if point.strip()
+                ]
+
+            for point in assessment_points:
+                st.markdown(f"- {point}")
 
             st.divider()
 
@@ -1443,6 +1462,3 @@ if lesson:
             st.success(
                 lesson["home"]
             )
-            
-            
-                 

@@ -50,10 +50,12 @@ def login_user(email, password):
     conn = get_connection()
     cursor = conn.cursor()
 
+    placeholder = "?" if conn.__class__.__module__ == "sqlite3" else "%s"
+
     cursor.execute(
-        """
+        f"""
         SELECT * FROM users
-        WHERE email = %s
+        WHERE email = {placeholder}
         """,
         (email,)
     )

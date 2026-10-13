@@ -1,6 +1,6 @@
 # ---------------- APPLICATION SETTINGS ----------------
 
-APP_TITLE = "📚 ECE AI Assistant"
+APP_TITLE = "📚 TutAide"
 
 APP_DESCRIPTION = (
     "Generate structured early childhood lesson plans instantly."

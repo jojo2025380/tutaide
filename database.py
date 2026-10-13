@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import json
+import re
 from datetime import datetime
 
 import psycopg2
@@ -10,6 +11,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE = "lessons.db"
+
+
+class SQLiteCompatCursor(sqlite3.Cursor):
+    """Adapt PostgreSQL-style SQL placeholders for local SQLite."""
+
+    def execute(self, sql, parameters=()):
+        sql = sql.replace("%s", "?")
+        sql = re.sub(r"\bILIKE\b", "LIKE", sql, flags=re.IGNORECASE)
+        return super().execute(sql, parameters)
+
+
+class SQLiteCompatConnection(sqlite3.Connection):
+    """Use the compatibility cursor for SQLite queries."""
+
+    def cursor(self, factory=SQLiteCompatCursor):
+        return super().cursor(factory)
 
 
 def get_connection():
@@ -22,7 +39,10 @@ def get_connection():
             cursor_factory=RealDictCursor
         )
 
-    conn = sqlite3.connect(DATABASE)
+    conn = sqlite3.connect(
+        DATABASE,
+        factory=SQLiteCompatConnection
+    )
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -581,11 +601,13 @@ def count_user_lessons(user_id):
     conn = get_connection()
     cursor = conn.cursor()
 
+    placeholder = "?" if conn.__class__.__module__ == "sqlite3" else "%s"
+
     cursor.execute(
-        """
+        f"""
         SELECT COUNT(*) AS count
         FROM lessons
-        WHERE user_id = %s
+        WHERE user_id = {placeholder}
         """,
         (user_id,)
     )
@@ -755,23 +777,24 @@ def get_user_subscription(user_id):
     conn = get_connection()
     cursor = conn.cursor()
 
+    placeholder = "?" if conn.__class__.__module__ == "sqlite3" else "%s"
+
     cursor.execute(
-        """
+        f"""
         SELECT
             plan,
             subscription_status,
             subscription_start,
             subscription_end
-
         FROM users
-
-        WHERE id = %s
+        WHERE id = {placeholder}
         """,
         (user_id,)
     )
 
     result = cursor.fetchone()
 
+    cursor.close()
     conn.close()
 
     if result is None:
@@ -789,6 +812,7 @@ def get_current_month():
     return datetime.now().strftime("%Y-%m")
 
 
+
 def get_usage(user_id):
 
     month = get_current_month()
@@ -796,15 +820,15 @@ def get_usage(user_id):
     conn = get_connection()
     cursor = conn.cursor()
 
+    placeholder = "?" if conn.__class__.__module__ == "sqlite3" else "%s"
+
     cursor.execute(
-        """
+        f"""
         INSERT INTO usage (
             user_id,
             month
         )
-
-        VALUES (%s, %s)
-
+        VALUES ({placeholder}, {placeholder})
         ON CONFLICT (user_id, month)
         DO NOTHING
         """,
@@ -814,20 +838,22 @@ def get_usage(user_id):
     conn.commit()
 
     cursor.execute(
-        """
+        f"""
         SELECT *
         FROM usage
-        WHERE user_id = %s
-        AND month = %s
+        WHERE user_id = {placeholder}
+        AND month = {placeholder}
         """,
         (user_id, month)
     )
 
     result = cursor.fetchone()
 
+    cursor.close()
     conn.close()
 
     return dict(result)
+
 
 
 def increment_usage(
