@@ -772,7 +772,9 @@ if lesson:
                # ---------------- Tabs ----------------
 
         lesson_tab, activities_tab, assessment_tab = st.tabs(
-            ["📖 Lesson", "🎵 Activities", "🧪 Assessment"]
+            ["📖 Lesson", "🎵 Activities", "🧪 Assessment"],
+            key="lesson_tabs",
+            on_change="rerun"
         )
 
 
