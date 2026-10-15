@@ -7,11 +7,12 @@ from ai_client import client
 
 
 
+
+
 def _process_card_sheet(image_b64, labels):
-
     import io
-
-    from PIL import Image, ImageChops
+    import base64
+    from PIL import Image, ImageChops, ImageOps
 
     image_bytes = base64.b64decode(image_b64)
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
@@ -28,51 +29,53 @@ def _process_card_sheet(image_b64, labels):
     ]
 
     cards = []
-    target_scale = 0.78
 
     for box in boxes:
         cropped = image.crop(box)
-        card_width, card_height = cropped.size
-
         gray = cropped.convert("L")
-        threshold = gray.point(lambda p: 255 if p > 235 else 0)
-        background = Image.new("L", threshold.size, 255)
-        diff = ImageChops.difference(threshold, background)
+
+        # If the corners are dark, invert the image to make its
+        # background white and its outlines dark.
+        corners = [
+            gray.getpixel((0, 0)),
+            gray.getpixel((gray.width - 1, 0)),
+            gray.getpixel((0, gray.height - 1)),
+            gray.getpixel((gray.width - 1, gray.height - 1)),
+        ]
+
+        if sum(corners) / len(corners) < 127:
+            gray = ImageOps.invert(gray)
+
+        # Convert to clean black outlines on a white background.
+        cleaned = gray.point(lambda p: 0 if p < 160 else 255, mode="L")
+
+        background = Image.new("L", cleaned.size, 255)
+        diff = ImageChops.difference(cleaned, background)
         content_bbox = diff.getbbox()
 
-        content = cropped.crop(content_bbox) if content_bbox else cropped
-        content_width, content_height = content.size
+        content = cleaned.crop(content_bbox) if content_bbox else cleaned
+        max_width = int(half_width * 0.78)
+        max_height = int(half_height * 0.78)
 
-        max_width = int(card_width * target_scale)
-        max_height = int(card_height * target_scale)
-
-        resize_ratio = min(
-            max_width / content_width,
-            max_height / content_height
+        ratio = min(
+            max_width / content.width,
+            max_height / content.height
         )
 
-        new_width = max(1, int(content_width * resize_ratio))
-        new_height = max(1, int(content_height * resize_ratio))
-
-        resized = content.resize(
-            (new_width, new_height),
-            Image.LANCZOS
+        new_size = (
+            max(1, int(content.width * ratio)),
+            max(1, int(content.height * ratio))
         )
 
-        canvas = Image.new("RGB", (card_width, card_height), "white")
+        resized = content.resize(new_size, Image.Resampling.LANCZOS)
+        canvas = Image.new("L", (half_width, half_height), 255)
 
-        paste_x = (card_width - new_width) // 2
-        paste_y = (card_height - new_height) // 2
+        x = (half_width - new_size[0]) // 2
+        y = (half_height - new_size[1]) // 2
+        canvas.paste(resized, (x, y))
+        cards.append(canvas.convert("RGB"))
 
-        canvas.paste(resized, (paste_x, paste_y))
-        cards.append(canvas)
-
-    sheet = Image.new(
-        "RGB",
-        (half_width * 2, half_height * 2),
-        "white"
-    )
-
+    sheet = Image.new("RGB", (width, height), "white")
     positions = [
         (0, 0),
         (half_width, 0),
@@ -85,7 +88,6 @@ def _process_card_sheet(image_b64, labels):
 
     buffer = io.BytesIO()
     sheet.save(buffer, format="PNG")
-
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
@@ -231,7 +233,7 @@ Return only the image.
 
     raw_b64 = result.data[0].b64_json
 
-    return _process_card_sheet(raw_b64, card_items)
+    return raw_b64
 
 
 def generate_picture_cards_colour(topic, card_items, outcomes):
