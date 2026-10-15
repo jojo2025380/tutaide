@@ -81,6 +81,28 @@ def create_database():
         )
     """)
 
+        # ---------------- MFA MIGRATION ----------------
+
+    cursor.execute("PRAGMA table_info(users)")
+    existing_columns = {
+        row["name"] for row in cursor.fetchall()
+    }
+
+    mfa_columns = {
+        "mfa_secret": "TEXT DEFAULT NULL",
+        "mfa_enabled": "INTEGER NOT NULL DEFAULT 0",
+        "mfa_backup_codes": "TEXT DEFAULT NULL",
+    }
+
+    for column_name, column_definition in mfa_columns.items():
+        if column_name not in existing_columns:
+            cursor.execute(
+                f"ALTER TABLE users ADD COLUMN "
+                f"{column_name} {column_definition}"
+            )
+    
+    
+    
     # ---------------- LESSONS TABLE ----------------
 
     cursor.execute("""
@@ -171,6 +193,35 @@ def create_database():
 
         )
     """)
+    
+    
+    
+    # ---------------- PAYMENTS MIGRATION ----------------
+
+    cursor.execute("PRAGMA table_info(payments)")
+    payment_columns = {
+        column["name"]
+        for column in cursor.fetchall()
+    }
+
+    if "plan" not in payment_columns:
+        cursor.execute(
+            "ALTER TABLE payments ADD COLUMN plan TEXT"
+        )
+
+    if "mpesa_transaction_id" not in payment_columns:
+        cursor.execute(
+            "ALTER TABLE payments ADD COLUMN mpesa_transaction_id TEXT"
+        )
+
+
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS payments_mpesa_transaction_id_unique
+        ON payments (mpesa_transaction_id)
+        WHERE mpesa_transaction_id IS NOT NULL
+    """)
+
+
 
     # ---------------- EXTENSION CREDITS TABLE ----------------
 
@@ -664,50 +715,126 @@ def save_payment(user_id, amount, reference, status, plan=None):
     return payment_id
 
 
-def update_payment_status(reference, status):
-
+def has_mpesa_receipt(reference):
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute(
-        """
-        UPDATE payments
-        SET status = %s
-        WHERE reference = %s
-        """,
-        (
-            status,
-            reference
+    try:
+        cursor.execute(
+            """
+            SELECT mpesa_transaction_id
+            FROM payments
+            WHERE reference = %s
+              AND status = 'pending'
+              AND mpesa_transaction_id IS NOT NULL
+            """,
+            (reference,),
         )
-    )
+        return cursor.fetchone() is not None
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+    finally:
+        cursor.close()
+        conn.close()
 
 
-def get_payment_by_reference(reference):
+
+def update_payment_status(reference, status):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        if status == "success":
+            cursor.execute(
+                """
+                UPDATE payments
+                SET status = %s
+                WHERE reference = %s
+                  AND status = 'pending'
+                  AND mpesa_transaction_id IS NOT NULL
+                """,
+                (status, reference),
+            )
+        else:
+            cursor.execute(
+                """
+                UPDATE payments
+                SET status = %s
+                WHERE reference = %s
+                  AND status = 'pending'
+                """,
+                (status, reference),
+            )
+
+        updated = cursor.rowcount > 0
+        conn.commit()
+        return updated
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+
+
+
+def record_mpesa_callback(reference, amount, transaction_id):
+    if not reference or not transaction_id:
+        return False
+
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return False
 
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute(
-        """
-        SELECT *
-        FROM payments
-        WHERE reference = %s
-        """,
-        (reference,)
-    )
+    try:
+        cursor.execute(
+            """
+            UPDATE payments
+            SET mpesa_transaction_id = %s
+            WHERE reference = %s
+              AND status = 'pending'
+              AND amount = %s
+              AND (
+                  mpesa_transaction_id IS NULL
+                  OR mpesa_transaction_id = %s
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM payments AS other
+                  WHERE other.mpesa_transaction_id = %s
+                    AND other.reference <> %s
+              )
+            """,
+            (
+                transaction_id,
+                reference,
+                amount,
+                transaction_id,
+                transaction_id,
+                reference,
+            ),
+        )
 
-    result = cursor.fetchone()
+        recorded = cursor.rowcount > 0
+        conn.commit()
+        return recorded
 
-    conn.close()
+    except Exception:
+        conn.rollback()
+        raise
 
-    if result is None:
-        return None
+    finally:
+        cursor.close()
+        conn.close()
 
-    return dict(result)
+
 
 
 def get_user_payments(user_id):

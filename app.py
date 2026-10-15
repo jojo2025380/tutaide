@@ -2,10 +2,13 @@ import streamlit as st
 import json
 from datetime import datetime, timedelta
 
+
+
 from auth import (
     create_user,
-    login_user
+    login_user,
 )
+
 
 
 from config import (
@@ -67,6 +70,7 @@ from database import (
     save_animated_story,
     set_subscription,
     save_payment,
+    has_mpesa_receipt,
     update_payment_status
 )
 
@@ -134,19 +138,21 @@ if st.session_state.user is None:
             key="login_password"
         )
 
+        
         if st.button("Login"):
 
             user = login_user(email, password)
 
             if user:
-
                 st.session_state.user = user
                 st.success(f"Welcome {user['name']}!")
                 st.rerun()
 
             else:
-
                 st.error("Invalid email or password.")
+
+        
+        
 
     # ---------------- CREATE ACCOUNT ----------------
 
@@ -205,6 +211,8 @@ st.sidebar.success(
     f"Logged in as\n\n**{st.session_state.user['name']}**"
 )
 
+
+
 if st.sidebar.button("🚪 Logout", width="stretch"):
 
     st.session_state.user = None
@@ -234,6 +242,13 @@ remaining_images = get_remaining_images(
     plan_limits["image_limit"]
 )
 
+
+remaining_picture_cards = get_remaining_picture_cards(
+    st.session_state.user["id"],
+    plan_limits["picture_card_limit"]
+)
+
+
 st.sidebar.subheader("💳 Your Plan")
 
 st.sidebar.info(
@@ -257,6 +272,14 @@ st.sidebar.markdown(
     f"{plan_limits['image_limit'] - remaining_images}"
     f"/{plan_limits['image_limit']}"
 )
+
+
+st.sidebar.markdown(
+    f"🃏 **Picture Cards:** "
+    f"{plan_limits['picture_card_limit'] - remaining_picture_cards}"
+    f"/{plan_limits['picture_card_limit']}"
+)
+
 
 st.sidebar.divider()
 
@@ -323,15 +346,23 @@ for plan_key, plan in PLANS.items():
                             f"TutAide {plan['name']} Plan"
                         )
 
-                        checkout_id = stk_response.get(
-                            "CheckoutRequestID"
-                        )
+                        
+                        checkout_id = stk_response.get("CheckoutRequestID")
 
+                        if not checkout_id:
+                            st.sidebar.error(
+                                "M-PESA did not return a checkout request ID. "
+                                "No payment was recorded. Please try again."
+                            )
+                            st.stop()
+
+                        
                         save_payment(
                             st.session_state.user["id"],
                             plan["price"],
                             checkout_id,
-                            "pending"
+                            "pending",
+                            plan_key
                         )
 
                         with st.spinner(
@@ -351,15 +382,29 @@ for plan_key, plan in PLANS.items():
                                     checkout_id
                                 )
 
-                                if payment_result != "pending":
+                                if payment_result == "success":
+                                    if has_mpesa_receipt(checkout_id):
+                                        break
+                                    payment_result = "pending"
+
+                                elif payment_result == "failed":
                                     break
 
                         if payment_result == "success":
 
-                            update_payment_status(
+
+                            payment_updated = update_payment_status(
                                 checkout_id,
                                 "success"
                             )
+
+                            if not payment_updated:
+                                st.sidebar.warning(
+                                    "This payment has already been processed "
+                                    "or could not be verified. Please check "
+                                    "your payment history before trying again."
+                                )
+                                st.stop()
 
                             today = datetime.now().strftime("%Y-%m-%d")
 
@@ -481,16 +526,24 @@ if st.session_state.get("show_extension_payment"):
                     "TutAide Extension Pack"
                 )
 
-                checkout_id = stk_response.get(
-                    "CheckoutRequestID"
-                )
+                
+                checkout_id = stk_response.get("CheckoutRequestID")
+
+                if not checkout_id:
+                    st.sidebar.error(
+                        "M-PESA did not return a checkout request ID. "
+                        "No payment was recorded. Please try again."
+                    )
+                    st.stop()
 
                 save_payment(
                     st.session_state.user["id"],
                     150,
                     checkout_id,
-                    "pending"
+                    "pending",
+                    f"extension_{selected_resource}"
                 )
+
 
                 with st.spinner(
                     "Waiting for M-Pesa confirmation... "
@@ -501,6 +554,7 @@ if st.session_state.get("show_extension_payment"):
 
                     payment_result = "pending"
 
+                    
                     for _ in range(10):
 
                         time.sleep(3)
@@ -509,15 +563,29 @@ if st.session_state.get("show_extension_payment"):
                             checkout_id
                         )
 
-                        if payment_result != "pending":
+                        if payment_result == "success":
+                            if has_mpesa_receipt(checkout_id):
+                                break
+                            payment_result = "pending"
+
+                        elif payment_result == "failed":
                             break
+
 
                 if payment_result == "success":
 
-                    update_payment_status(
+                    payment_updated = update_payment_status(
                         checkout_id,
                         "success"
                     )
+
+                    if not payment_updated:
+                        st.sidebar.warning(
+                            "This payment has already been processed "
+                            "or could not be verified. Please check "
+                            "your payment history before trying again."
+                        )
+                        st.stop()
 
                     add_extension_credits(
                         st.session_state.user["id"],
@@ -1203,29 +1271,110 @@ if lesson:
 
 
                 # ==================================================
-                # PICTURE CARDS
-                # ==================================================
+            # PICTURE CARDS
+            # ==================================================
 
-                st.divider()
+            st.divider()
 
-                st.subheader("🃏 Picture Cards")
+            st.subheader("🃏 Picture Cards")
 
-                plan_limits = get_plan_limits(
-                    st.session_state.user["id"]
-                )
+            plan_limits = get_plan_limits(
+                st.session_state.user["id"]
+            )
 
-                remaining_picture_cards = get_remaining_picture_cards(
+            remaining_picture_cards = get_remaining_picture_cards(
+                st.session_state.user["id"],
+                plan_limits["picture_card_limit"]
+            )
+
+            if remaining_picture_cards > 0:
+
+                if st.button(
+                    f"🃏 Generate Picture Cards "
+                    f"({remaining_picture_cards} remaining)",
+                    key="generate_picture_cards",
+                    width="stretch"
+                ):
+
+                    try:
+
+                        card_items = get_picture_card_items(
+                            lesson.get("topic") or lesson["title"]
+                        )
+
+                        with st.spinner(
+                            "Creating picture cards..."
+                        ):
+
+                            picture_cards = generate_picture_cards(
+                                lesson.get("topic") or lesson["title"],
+                                card_items,
+                                lesson["outcomes"]
+                            )
+
+                            picture_cards_colour = generate_picture_cards_colour(
+                                lesson.get("topic") or lesson["title"],
+                                card_items,
+                                lesson["outcomes"]
+                            )
+
+                    except Exception:
+
+                        st.error(
+                            "⚠️ We couldn't generate the picture cards "
+                            "right now. Please try again later."
+                        )
+
+                        st.stop()
+
+                    st.session_state.picture_cards = picture_cards
+                    st.session_state.picture_cards_colour = picture_cards_colour
+
+                    save_picture_cards(
+                        st.session_state.user["id"],
+                        lesson["id"],
+                        picture_cards
+                    )
+
+                    save_picture_cards_colour(
+                        st.session_state.user["id"],
+                        lesson["id"],
+                        picture_cards_colour
+                    )
+
+
+                    increment_usage(
+                        st.session_state.user["id"],
+                        "picture_cards_used"
+                    )
+
+                    st.success(
+                        f"🃏 Picture Cards generated successfully! "
+                        f"{remaining_picture_cards - 1} "
+                        f"picture card generation(s) remaining."
+                    )
+
+                    st.rerun()
+
+            else:
+
+                extension_picture_cards = get_extension_credits(
                     st.session_state.user["id"],
-                    plan_limits["picture_card_limit"]
+                    "picture_cards"
                 )
 
-                if remaining_picture_cards > 0:
+                if extension_picture_cards > 0:
+
+                    st.info(
+                        f"🎁 Your monthly picture card allowance is finished. "
+                        f"You have {extension_picture_cards} Extension Pack "
+                        f"picture card credit(s) available."
+                    )
 
                     if st.button(
-                        f"🃏 Generate Picture Cards "
-                        f"({remaining_picture_cards} remaining)",
-                        key="generate_picture_cards",
-                        width="stretch"
+                        "🃏 Use Extension Pack Credit",
+                        width="stretch",
+                        key="use_picture_card_extension"
                     ):
 
                         try:
@@ -1239,13 +1388,7 @@ if lesson:
                             ):
 
                                 picture_cards = generate_picture_cards(
-                                    lesson["title"],
-                                    card_items,
-                                    lesson["outcomes"]
-                                )
-
-                                picture_cards_colour = generate_picture_cards_colour(
-                                    lesson["title"],
+                                    lesson.get("topic") or lesson["title"],
                                     card_items,
                                     lesson["outcomes"]
                                 )
@@ -1259,8 +1402,12 @@ if lesson:
 
                             st.stop()
 
+                        use_extension_credit(
+                            st.session_state.user["id"],
+                            "picture_cards"
+                        )
+
                         st.session_state.picture_cards = picture_cards
-                        st.session_state.picture_cards_colour = picture_cards_colour
 
                         save_picture_cards(
                             st.session_state.user["id"],
@@ -1268,165 +1415,86 @@ if lesson:
                             picture_cards
                         )
 
-                        save_picture_cards_colour(
-                            st.session_state.user["id"],
-                            lesson["id"],
-                            picture_cards_colour
-                        )
-
-
-                        increment_usage(
-                            st.session_state.user["id"],
-                            "picture_cards_used"
-                        )
-
                         st.success(
-                            f"🃏 Picture Cards generated successfully! "
-                            f"{remaining_picture_cards - 1} "
-                            f"picture card generation(s) remaining."
+                            "🃏 Picture Cards generated using "
+                            "1 Extension Pack credit!"
                         )
 
                         st.rerun()
 
                 else:
 
-                    extension_picture_cards = get_extension_credits(
-                        st.session_state.user["id"],
-                        "picture_cards"
+                    st.warning(
+                        f"🔒 You have used all your "
+                        f"{plan_limits['name']} picture card generations "
+                        f"and have no Extension Pack picture card credits."
                     )
 
-                    if extension_picture_cards > 0:
+                # ---------------- DISPLAY PICTURE CARDS ----------------
 
-                        st.info(
-                            f"🎁 Your monthly picture card allowance is finished. "
-                            f"You have {extension_picture_cards} Extension Pack "
-                            f"picture card credit(s) available."
-                        )
+            picture_cards_to_display = st.session_state.picture_cards
 
-                        if st.button(
-                            "🃏 Use Extension Pack Credit",
-                            width="stretch",
-                            key="use_picture_card_extension"
-                        ):
+            if (
+                not picture_cards_to_display
+                and lesson
+                and lesson.get("picture_cards")
+            ):
 
-                            try:
-
-                                card_items = get_picture_card_items(
-                                    lesson.get("topic") or lesson["title"]
-                                )
-
-                                with st.spinner(
-                                    "Creating picture cards..."
-                                ):
-
-                                    picture_cards = generate_picture_cards(
-                                        lesson["title"],
-                                        card_items,
-                                        lesson["outcomes"]
-                                    )
-
-                            except Exception:
-
-                                st.error(
-                                    "⚠️ We couldn't generate the picture cards "
-                                    "right now. Please try again later."
-                                )
-
-                                st.stop()
-
-                            use_extension_credit(
-                                st.session_state.user["id"],
-                                "picture_cards"
-                            )
-
-                            st.session_state.picture_cards = picture_cards
-
-                            save_picture_cards(
-                                st.session_state.user["id"],
-                                lesson["id"],
-                                picture_cards
-                            )
-
-                            st.success(
-                                "🃏 Picture Cards generated using "
-                                "1 Extension Pack credit!"
-                            )
-
-                            st.rerun()
-
-                    else:
-
-                        st.warning(
-                            f"🔒 You have used all your "
-                            f"{plan_limits['name']} picture card generations "
-                            f"and have no Extension Pack picture card credits."
-                        )
-
-                    # ---------------- DISPLAY PICTURE CARDS ----------------
-
-                picture_cards_to_display = st.session_state.picture_cards
-
-                if (
-                    not picture_cards_to_display
-                    and lesson
-                    and lesson.get("picture_cards")
-                ):
-
-                    picture_cards_to_display = lesson.get(
-                       "picture_cards"
-                    )
-
-                if picture_cards_to_display:
-
-                    import base64
-
-                    st.markdown("**🖍️ For children to colour**")
-
-                    card_bytes = base64.b64decode(
-                        picture_cards_to_display
-                    )
-
-                    st.image(
-                        card_bytes,
-                        width="stretch"
-                    )
-
-                    st.download_button(
-                        "⬇️ Download colouring version",
-                        data=card_bytes,
-                        file_name="picture_cards_colouring.png",
-                        mime="image/png"
-                    )
-
-                picture_cards_colour_to_display = st.session_state.get(
-                    "picture_cards_colour"
+                picture_cards_to_display = lesson.get(
+                   "picture_cards"
                 )
 
-                if picture_cards_colour_to_display:
+            if picture_cards_to_display:
 
-                    import base64
+                import base64
 
-                    st.markdown("**🎨 Full-colour version (for you)**")
+                st.markdown("**🖍️ For children to colour**")
 
-                    colour_bytes = base64.b64decode(
-                        picture_cards_colour_to_display
-                    )
+                card_bytes = base64.b64decode(
+                    picture_cards_to_display
+                )
 
-                    st.image(
-                        colour_bytes,
-                        width="stretch"
-                    )
+                st.image(
+                    card_bytes,
+                    width="stretch"
+                )
 
-                    st.download_button(
-                        "⬇️ Download colour version",
-                        data=colour_bytes,
-                        file_name="picture_cards_colour.png",
-                        mime="image/png"
-                    )
+                st.download_button(
+                    "⬇️ Download colouring version",
+                    data=card_bytes,
+                    file_name="picture_cards_colouring.png",
+                    mime="image/png"
+                )
+
+            picture_cards_colour_to_display = st.session_state.get(
+                "picture_cards_colour"
+            )
+
+            if picture_cards_colour_to_display:
+
+                import base64
+
+                st.markdown("**🎨 Full-colour version (for you)**")
+
+                colour_bytes = base64.b64decode(
+                    picture_cards_colour_to_display
+                )
+
+                st.image(
+                    colour_bytes,
+                    width="stretch"
+                )
+
+                st.download_button(
+                    "⬇️ Download colour version",
+                    data=colour_bytes,
+                    file_name="picture_cards_colour.png",
+                    mime="image/png"
+                )
 
         
         
-        # ==================================================
+    # ==================================================
         # ASSESSMENT TAB
         # ==================================================
 

@@ -1,20 +1,22 @@
 import base64
+import io
+
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 from ai_client import client
+
 
 
 def _process_card_sheet(image_b64, labels):
 
     import io
 
-    from PIL import Image, ImageDraw, ImageFont, ImageChops
+    from PIL import Image, ImageChops
 
     image_bytes = base64.b64decode(image_b64)
-
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
     width, height = image.size
-
     half_width = width // 2
     half_height = height // 2
 
@@ -25,53 +27,29 @@ def _process_card_sheet(image_b64, labels):
         (half_width, half_height, width, height),
     ]
 
-    try:
-        font = ImageFont.truetype("arial.ttf", 42)
-    except Exception:
-        try:
-            font = ImageFont.load_default(size=42)
-        except Exception:
-            font = ImageFont.load_default()
-
-    label_height = 70
-    padding = 12
-
-    labeled_cards = []
-
+    cards = []
     target_scale = 0.78
 
-    for box, label in zip(boxes, labels):
-
+    for box in boxes:
         cropped = image.crop(box)
-
         card_width, card_height = cropped.size
 
         gray = cropped.convert("L")
-
-        threshold = gray.point(
-            lambda p: 255 if p > 235 else 0
-        )
-
+        threshold = gray.point(lambda p: 255 if p > 235 else 0)
         background = Image.new("L", threshold.size, 255)
-
         diff = ImageChops.difference(threshold, background)
-
         content_bbox = diff.getbbox()
 
-        if content_bbox:
-            content = cropped.crop(content_bbox)
-        else:
-            content = cropped
-
+        content = cropped.crop(content_bbox) if content_bbox else cropped
         content_width, content_height = content.size
 
         max_width = int(card_width * target_scale)
         max_height = int(card_height * target_scale)
 
-        width_ratio = max_width / content_width
-        height_ratio = max_height / content_height
-
-        resize_ratio = min(width_ratio, height_ratio)
+        resize_ratio = min(
+            max_width / content_width,
+            max_height / content_height
+        )
 
         new_width = max(1, int(content_width * resize_ratio))
         new_height = max(1, int(content_height * resize_ratio))
@@ -81,71 +59,110 @@ def _process_card_sheet(image_b64, labels):
             Image.LANCZOS
         )
 
-        padded = Image.new(
-            "RGB",
-            (card_width, card_height),
-            "white"
-        )
+        canvas = Image.new("RGB", (card_width, card_height), "white")
 
         paste_x = (card_width - new_width) // 2
         paste_y = (card_height - new_height) // 2
 
-        padded.paste(resized, (paste_x, paste_y))
-
-        canvas = Image.new(
-            "RGB",
-            (card_width, card_height + label_height),
-            "white"
-        )
-
-        canvas.paste(padded, (0, 0))
-
-        draw = ImageDraw.Draw(canvas)
-
-        text = label.title()
-
-        text_bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = text_bbox[2] - text_bbox[0]
-
-        text_x = (card_width - text_width) // 2
-        text_y = card_height + padding
-
-        draw.text(
-            (text_x, text_y),
-            text,
-            fill="black",
-            font=font
-        )
-
-        labeled_cards.append(canvas)
-
-    card_w, card_h = labeled_cards[0].size
+        canvas.paste(resized, (paste_x, paste_y))
+        cards.append(canvas)
 
     sheet = Image.new(
         "RGB",
-        (card_w * 2, card_h * 2),
+        (half_width * 2, half_height * 2),
         "white"
     )
 
     positions = [
         (0, 0),
-        (card_w, 0),
-        (0, card_h),
-        (card_w, card_h),
+        (half_width, 0),
+        (0, half_height),
+        (half_width, half_height),
     ]
 
-    for card_img, pos in zip(labeled_cards, positions):
-
+    for card_img, pos in zip(cards, positions):
         sheet.paste(card_img, pos)
 
     buffer = io.BytesIO()
-
     sheet.save(buffer, format="PNG")
 
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
+
+
+def generate_number_cards(style="colour"):
+    """Create four number cards with exactly matching quantities of objects."""
+
+    import io
+    import base64
+    from PIL import Image, ImageDraw, ImageFont
+
+    card_size = 512
+    sheet = Image.new("RGB", (card_size * 2, card_size * 2), "white")
+    draw = ImageDraw.Draw(sheet)
+
+    try:
+        number_font = ImageFont.truetype("arial.ttf", 110)
+    except OSError:
+        number_font = ImageFont.load_default()
+
+    positions = [
+        (0, 0),
+        (card_size, 0),
+        (0, card_size),
+        (card_size, card_size),
+    ]
+
+    colours = ["red", "blue", "gold", "green"]
+    is_colour = style == "colour"
+
+    for number, (left, top) in enumerate(positions, start=1):
+        right = left + card_size
+        bottom = top + card_size
+
+        draw.rectangle(
+            (left + 8, top + 8, right - 8, bottom - 8),
+            outline="black",
+            width=3,
+        )
+
+        number_text = str(number)
+        bbox = draw.textbbox((0, 0), number_text, font=number_font)
+        number_width = bbox[2] - bbox[0]
+
+        draw.text(
+            (left + (card_size - number_width) // 2, top + 35),
+            number_text,
+            fill="black",
+            font=number_font,
+        )
+
+        for index in range(number):
+            col = index % 2
+            row = index // 2
+
+            x = left + 170 + col * 170
+            y = top + 275 + row * 95
+            radius = 28
+
+            draw.ellipse(
+                (x - radius, y - radius, x + radius, y + radius),
+                outline="black",
+                fill=colours[number - 1] if is_colour else "white",
+                width=4,
+            )
+
+    buffer = io.BytesIO()
+    sheet.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+
+
 def generate_picture_cards(topic, card_items, outcomes):
+    
+    if "number" in topic.lower():
+        return generate_number_cards(style="black_and_white")
 
     cards_text = "\n".join(
         f"- {item}"
@@ -218,6 +235,9 @@ Return only the image.
 
 
 def generate_picture_cards_colour(topic, card_items, outcomes):
+    
+    if "number" in topic.lower():
+        return generate_number_cards(style="colour")
 
     cards_text = "\n".join(
         f"- {item}"
