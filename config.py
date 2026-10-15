@@ -29,14 +29,16 @@ LESSON_DURATIONS = [
 
 PLANS = {
 
+   
     "basic": {
         "name": "Basic",
         "price": 599,
-        "lesson_limit": 5,
-        "story_limit": 2,
-        "image_limit": 2,
-        "picture_card_limit": 2,
+        "lesson_limit": 10,
+        "story_limit": 3,
+        "image_limit": 5,
+        "picture_card_limit": 4,
     },
+
 
     "creative": {
         "name": "Creative",

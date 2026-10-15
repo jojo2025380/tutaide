@@ -38,10 +38,17 @@ def show_dashboard(user, lesson_count):
             lesson_count
         )
 
+    
     with col3:
         st.metric(
             "💎 Account",
             plan_limits["name"]
         )
 
-    st.divider()
+        st.caption(
+            f"📚 {plan_limits['lesson_limit']} lessons\n\n"
+            f"🎬 {plan_limits['story_limit']} stories\n\n"
+            f"🖼️ {plan_limits['image_limit']} images\n\n"
+            f"🃏 {plan_limits['picture_card_limit']} picture cards"
+        )
+
