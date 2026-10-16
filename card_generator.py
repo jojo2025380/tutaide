@@ -302,7 +302,7 @@ Return only the image.
 
     raw_b64 = result.data[0].b64_json
 
-    return _process_card_sheet(raw_b64, card_items)
+    return raw_b64
 
 
 def get_picture_card_items(topic):
