@@ -25,28 +25,26 @@ LESSON_DURATIONS = [
     "45 Minutes"
 ]
 
+
 # ---------------- SUBSCRIPTION PLANS ----------------
 
 PLANS = {
-
-   
     "basic": {
         "name": "Basic",
         "price": 599,
-        "lesson_limit": 10,
-        "story_limit": 3,
+        "lesson_limit": 15,
+        "story_limit": 5,
         "image_limit": 5,
-        "picture_card_limit": 4,
+        "picture_card_limit": 10,
     },
-
 
     "creative": {
         "name": "Creative",
         "price": 899,
         "lesson_limit": 30,
         "story_limit": 10,
-        "image_limit": 20,
-        "picture_card_limit": 6,
+        "image_limit": 10,
+        "picture_card_limit": 20,
     },
 
     "pro": {
@@ -57,5 +55,4 @@ PLANS = {
         "image_limit": 150,
         "picture_card_limit": 50,
     }
-
 }
