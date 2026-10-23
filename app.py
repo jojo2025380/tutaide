@@ -297,6 +297,7 @@ for plan_key, plan in PLANS.items():
         f"📚 {plan['lesson_limit']} lessons  •  "
         f"🎬 {plan['story_limit']} stories  •  "
         f"🖼️ {plan['image_limit']} images"
+        f"🃏 {plan['picture_card_limit']} picture-card generations"
     )
 
     if plan_key == plan_limits["key"]:
